@@ -1,0 +1,376 @@
+
+import random
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from statsmodels.tsa.api import ExponentialSmoothing, SimpleExpSmoothing, Holt
+from statsmodels.tsa.seasonal import seasonal_decompose
+import pmdarima as pm
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from dateutil.relativedelta import relativedelta
+
+
+data = pd.read_csv("C:/Users/User/Desktop/Minecraft Addons/chzusdt_prices2 (1).csv",parse_dates = [0], index_col = 0) #na coluna 0 voce tem datas por isso o 0. O index significa nao é a variavel e sim indices
+
+index = pd.date_range(start = "2019-08-30", end = "2024-06-24", freq = "w")
+
+data = data.loc['2019-08-30 21:00:00':]
+
+data.index = index
+
+#colocar grafco para ver o comportamento da serie
+
+grafico = data.plot()
+grafico.set_xlabel("Ano")
+grafico.set_ylabel("Preços")
+
+fechamento = data[['Preço de fechamento do CHZUSDT']]
+maximo = data[['Preço máximo do dia']]
+minimo = data[['Preço mínimo do dia']]
+
+treinoFech = fechamento.iloc[:219,] #aqui ele esta indo ate 1332, ele nao conta o 1333
+testeFech = fechamento.iloc[219:,]
+
+treinoMax = maximo.iloc[:219,] #aqui ele esta indo ate 1332, ele nao conta o 1333
+testeMax = maximo.iloc[219:,]
+
+treinoMin = minimo.iloc[:219,] #aqui ele esta indo ate 1332, ele nao conta o 1333
+testeMin = minimo.iloc[219:,]
+
+###########################################################
+                   #Amortecimento exponencial simples 
+###########################################################
+#OBSERVAÇÃO ESTE METODO SO PERMITE FAZER PREVISÕES UM PASSO A FRENTE
+#Separação entre treino e este
+# selecionar colunas especificas (data frame com defesa, type 1, e type 2)
+
+random.seed(10)#parti sempre do mesmo numero tira a semente aleatoria
+
+modeloFech_aes = SimpleExpSmoothing(treinoFech).fit() #ele usou a frequencia D como nao foi dado a frequencia
+
+modeloMax_aes = SimpleExpSmoothing(treinoMax).fit() #ele usou a frequencia D como nao foi dado a frequencia
+
+modeloMin_aes = SimpleExpSmoothing(treinoMin).fit() #ele usou a frequencia D como nao foi dado a frequencia
+
+
+modeloFech_aes.summary()
+
+modeloMax_aes.summary()
+
+modeloMin_aes.summary()
+
+#Previsões na amostra de teste
+
+prev_testeFech_aes = modeloFech_aes.forecast(len(testeFech)) #aqui diz quantas previsões
+
+prev_testeMax_aes = modeloMax_aes.forecast(len(testeMax)) #aqui diz quantas previsões
+
+prev_testeMin_aes = modeloMin_aes.forecast(len(testeMin)) #aqui diz quantas previsões
+
+MAPEFech_aes = np.mean(np.abs(testeFech.squeeze() - prev_testeFech_aes)/testeFech.squeeze())*100
+
+MAPEMax_aes = np.mean(np.abs(testeMax.squeeze() - prev_testeMax_aes)/testeMax.squeeze())*100
+
+MAPEMin_aes = np.mean(np.abs(testeMin.squeeze() - prev_testeMin_aes)/testeMin.squeeze())*100
+
+print(MAPEFech_aes)
+print(MAPEMax_aes)
+print(MAPEMin_aes)
+
+
+
+plt.plot(treinoFech)
+plt.plot(testeFech)
+plt.plot(prev_testeFech_aes)
+plt.legend(['treino', 'teste', 'previsao fechamento']) #este método nao esta legal linha reta                                   
+      
+
+plt.plot(treinoMax)
+plt.plot(testeMax)
+plt.plot(prev_testeMax_aes)
+plt.legend(['treinoMax', 'testeMax', 'previsao maximo']) #este método nao esta legal linha reta                                   
+      
+plt.plot(treinoMin)
+plt.plot(testeMin)
+plt.plot(prev_testeMin_aes)
+plt.legend(['treinoMin', 'testeMin', 'previsao Minimo']) #este método nao esta legal linha reta                                   
+      
+#################################################
+######## MÉTODO DE HOLT(TENDENCIA LINEAR)######## 
+#################################################
+
+random.seed(10)#parti sempre do mesmo numero tira a semente aleatoria
+
+modeloFech_holt = Holt(treinoFech).fit()
+
+modeloMax_holt = Holt(treinoMax).fit()
+
+modeloMin_holt = Holt(treinoMin).fit()
+
+
+
+modeloFech_holt.summary()
+
+modeloMax_holt.summary()
+
+modeloMin_holt.summary()
+
+
+#teste
+
+prev_testeFech_holt = modeloFech_holt.forecast(len(testeFech))
+
+prev_testeMax_holt = modeloMax_holt.forecast(len(testeMax))
+
+prev_testeMin_holt = modeloMin_holt.forecast(len(testeMin))
+
+
+
+
+#MAPE
+
+MAPEFech_holt = np.mean(np.abs(testeFech.squeeze() - prev_testeFech_holt)/testeFech.squeeze())
+
+MAPEMax_holt = np.mean(np.abs(testeMax.squeeze() - prev_testeMax_holt)/testeMax.squeeze())
+
+MAPEMin_holt = np.mean(np.abs(testeMin.squeeze() - prev_testeMin_holt)/testeMin.squeeze())
+
+print(MAPEFech_holt)
+
+print(MAPEMax_holt)
+
+print(MAPEMin_holt)
+
+
+plt.plot(treinoFech)
+plt.plot(testeFech)
+plt.plot(prev_testeFech_holt)
+plt.legend(['treinoFech', 'previsão holt Fechamento']) #este método nao esta legal linha reta
+
+plt.plot(treinoMax)
+plt.plot(testeMax)
+plt.plot(prev_testeMax_holt)
+plt.legend(['treinoMax', 'previsão holt Maximo']) #este método nao esta legal linha reta
+ 
+plt.plot(treinoMin)
+plt.plot(testeMin)
+plt.plot(prev_testeMin_holt)
+plt.legend(['treinoMin', 'previsão holt Minimo']) #este método nao esta legal linha reta
+   
+
+##########################################
+############ARIMA########################
+
+for x in range(29,31):
+    
+                      modeloFech_arima = pm.auto_arima(treinoFech,
+                                   start_p=0,
+                                   start_q=0,
+                                   d=0,                                 
+                                   max_p=10,
+                                   max_d=10,
+                                   start_P=1,
+                                   start_Q=1,
+                                   max_P=10,
+                                   max_D=10,
+                                   max_Q=10,
+                                   m=x,#o melhor m encontrado nos testes foi o 3 periodos 
+                                   seasonal=True,
+                                   trace = True,
+                                   error_action='ignore',
+                                   suppress_warnings= True,
+                                   stepwise= True)
+                                   
+    
+                      modeloFech_arima = modeloFech_arima.fit(treinoFech)
+                      modeloFech_arima.summary()
+ 
+                      prev_testeFech_arima = modeloFech_arima.predict(len(testeFech))                              
+                        
+                      MAPEFech_arima = np.mean(np.abs(testeFech.squeeze() - prev_testeFech_arima)/testeFech.squeeze())*100
+                        
+                      print(MAPEFech_arima)                
+
+modeloFech_arima = pm.auto_arima(treinoFech,
+             start_p=0,
+             start_q=0,
+             d=0,                                 
+             max_p=10,
+             max_d=10,
+             start_P=1,
+             start_Q=1,
+             max_P=10,
+             max_D=10,
+             max_Q=10,
+             m=30,#o melhor m encontrado nos testes foi o 9 periodos 
+             seasonal=True,
+             trace = True,
+             error_action='ignore',
+             suppress_warnings= True,
+             stepwise= True)
+             
+
+modeloFech_arima = modeloFech_arima.fit(treinoFech)
+modeloFech_arima.summary()
+
+prev_testeFech_arima = modeloFech_arima.predict(len(testeFech))                              
+  
+MAPEFech_arima = np.mean(np.abs(testeFech.squeeze() - prev_testeFech_arima)/testeFech.squeeze())*100
+  
+print(MAPEFech_arima)        
+
+plt.plot(treinoFech)
+plt.plot(testeFech)
+plt.plot(prev_testeFech_arima)
+plt.legend(['treino', 'teste', 'previsao arima Fechamento']) #este método nao esta legal linha reta                                   
+          
+
+for x in range(4,32):
+    
+                      modeloMax_arima = pm.auto_arima(treinoMax,
+                                   start_p=0,
+                                   start_q=0,
+                                   d=0,                                 
+                                   max_p=10,
+                                   max_d=10,
+                                   start_P=1,
+                                   start_Q=1,
+                                   max_P=10,
+                                   max_D=10,
+                                   max_Q=10,
+                                   m=x,#o melhor m encontrado nos testes foi o 3 periodos 
+                                   seasonal=True,
+                                   trace = True,
+                                   error_action='ignore',
+                                   suppress_warnings= True,
+                                   stepwise= True)
+                                   
+    
+                      modeloMax_arima = modeloMax_arima.fit(treinoMax)
+                      modeloMax_arima.summary()
+ 
+                      prev_testeMax_arima = modeloMax_arima.predict(len(testeMax))                              
+                        
+                      MAPEMax_arima = np.mean(np.abs(testeMax.squeeze() - prev_testeMax_arima)/testeMax.squeeze())*100
+                        
+                      print(MAPEMax_arima)       
+   
+modeloMax_arima = pm.auto_arima(treinoMax,
+             start_p=0,
+             start_q=0,
+             d=0,                                 
+             max_p=10,
+             max_d=10,
+             start_P=1,
+             start_Q=1,
+             max_P=10,
+             max_D=10,
+             max_Q=10,
+             m=3,#o melhor m encontrado nos testes foi o 3 periodos 
+             seasonal=True,
+             trace = True,
+             error_action='ignore',
+             suppress_warnings= True,
+             stepwise= True)
+             
+
+modeloMax_arima = modeloMax_arima.fit(treinoMax)
+modeloMax_arima.summary()
+
+prev_testeMax_arima = modeloMax_arima.predict(len(testeMax))                              
+  
+MAPEMax_arima = np.mean(np.abs(testeMax.squeeze() - prev_testeMax_arima)/testeMax.squeeze())*100
+  
+print(MAPEMax_arima)      
+
+plt.plot(treinoMax)
+plt.plot(testeMax)
+plt.plot(prev_testeMax_arima)
+plt.legend(['treino', 'teste', 'previsao arima Maximo']) #este método nao esta legal linha reta                                   
+          
+  
+for x in range(23,26):
+     
+                       modeloMin_arima = pm.auto_arima(treinoMin,
+                                    start_p=0,
+                                    start_q=0,
+                                    d=0,                                 
+                                    max_p=10,
+                                    max_d=10,
+                                    start_P=1,
+                                    start_Q=1,
+                                    max_P=10,
+                                    max_D=10,
+                                    max_Q=10,
+                                    m=x,#o melhor m encontrado nos testes foi o 3 periodos 
+                                    seasonal=True,
+                                    trace = True,
+                                    error_action='ignore',
+                                    suppress_warnings= True,
+                                    stepwise= True)
+                                    
+     
+                       modeloMin_arima = modeloMin_arima.fit(treinoMin)
+                       modeloMin_arima.summary()
+  
+                       prev_testeMin_arima = modeloMin_arima.predict(len(testeMin))                              
+                         
+                       MAPEMin_arima = np.mean(np.abs(testeMin.squeeze() - prev_testeMin_arima)/testeMin.squeeze())*100
+                         
+                       print(MAPEMin_arima)      
+   
+    
+   
+    
+   
+modeloMax_arima = pm.auto_arima(treinoMin,
+             start_p=0,
+             start_q=0,
+             d=0,                                 
+             max_p=10,
+             max_d=10,
+             start_P=1,
+             start_Q=1,
+             max_P=10,
+             max_D=10,
+             max_Q=10,
+             m=7,#o melhor m encontrado nos testes foi o 3 periodos 
+             seasonal=True,
+             trace = True,
+             error_action='ignore',
+             suppress_warnings= True,
+             stepwise= True)
+             
+
+modeloMin_arima = modeloMin_arima.fit(treinoMin)
+modeloMin_arima.summary()
+
+prev_testeMin_arima = modeloMin_arima.predict(len(testeMin))                              
+  
+MAPEMin_arima = np.mean(np.abs(testeMin.squeeze() - prev_testeMin_arima)/testeMin.squeeze())*100
+  
+print(MAPEMin_arima)      
+
+
+                              
+plt.plot(treinoMin)
+plt.plot(testeMin)
+plt.plot(prev_testeMin_arima)
+plt.legend(['treino', 'teste', 'previsao arima Minimo']) #este método nao esta legal linha reta                                   
+             
+plt.plot(treinoMax)
+plt.plot(testeMax)
+plt.plot(prev_testeMax_aes)
+plt.plot(prev_testeMax_holt)
+plt.plot(prev_testeMax_arima)
+plt.legend(['treinoMax', 'teste', 'previsão aes', 'previsão holt', 'previsao arima']) #este método nao esta legal linha reta                                   
+          
+plt.plot(treinoMin)
+plt.plot(testeMin)
+plt.plot(prev_testeMin_aes)
+plt.plot(prev_testeMin_holt)
+plt.plot(prev_testeMin_arima)
+plt.legend(['treinoMin', 'teste', 'previsão aes', 'previsão holt', 'previsao arima']) #este método nao esta legal linha reta                                   
+                    
+
