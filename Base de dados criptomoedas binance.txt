@@ -1,0 +1,76 @@
+import requests
+import json
+import datetime
+import numpy as np
+import locale
+import csv
+from pytz import timezone
+
+# Configurando para usar a formatação de números do sistema
+locale.setlocale(locale.LC_ALL, '')
+
+def get_chzusdt_price_history(api_key, interval, start_time, end_time):
+    url = "https://api.binance.com/api/v3/klines"
+    headers = {
+        'X-MBX-APIKEY': api_key
+    }
+    prices = []
+    min_max_prices = []  # Lista para armazenar os preços máximo e mínimo registrados após o fechamento do mercado
+
+    # Definindo o horário de fechamento do mercado (21:00 no horário de Brasília)
+    closing_hour_brasilia = 21
+
+    # Dividindo o intervalo de tempo em partes menores para evitar o limite da API
+    delta = datetime.timedelta(days=100)
+    current_time = start_time
+    while current_time < end_time:
+        params = {
+            'symbol': 'CHZUSDT',
+            'interval': interval,
+            'startTime': int(current_time.timestamp() * 1000),
+            'endTime': int((current_time + delta).timestamp() * 1000)
+        }
+        response = requests.get(url, headers=headers, params=params)
+        data = json.loads(response.text)
+        
+        # Convertendo os dados da API para o horário de Brasília e ajustando para o horário de fechamento do mercado
+        for item in data:
+            timestamp_utc = datetime.datetime.fromtimestamp(int(item[0])/1000)
+            timestamp_brasilia = timestamp_utc + datetime.timedelta(hours=-3)  # Convertendo para o horário de Brasília
+            if timestamp_utc.hour >= closing_hour_brasilia:
+                timestamp_brasilia += datetime.timedelta(days=1)  # Adicionando um dia se estiver após o horário de fechamento
+            timestamp_brasilia = timestamp_brasilia.replace(hour=closing_hour_brasilia, minute=0, second=0, microsecond=0)
+            if datetime.datetime.utcnow().hour < closing_hour_brasilia and timestamp_brasilia.date() == datetime.datetime.utcnow().date():
+                timestamp_brasilia -= datetime.timedelta(days=1)  # Se o mercado ainda não fechou, ajustamos para o dia anterior
+            prices.append((timestamp_brasilia, round(float(item[4]), 6)))  # Arredondando para 6 casas decimais
+            
+            # Adicionando preço máximo e mínimo registrado após o fechamento do mercado
+            max_price = round(float(item[2]), 6)
+            min_price = round(float(item[3]), 6)
+            min_max_prices.append((timestamp_brasilia, max_price, min_price))
+        
+        current_time += delta
+
+    return prices, min_max_prices
+
+api_key = ''  # Substitua pela sua chave API
+interval = '1d'  # Ajustado para dados diários
+start_time = datetime.datetime(2023, 10, 10)  # Data de início  
+end_time = datetime.datetime.now()  # Data de término ajustada para a data atual
+
+prices, min_max_prices = get_chzusdt_price_history(api_key, interval, start_time, end_time)
+
+# Escrevendo os resultados em um arquivo CSV separado
+csv_filename = 'chzusdt_prices2.csv'
+with open(csv_filename, mode='w', newline='', encoding='utf-8') as file:  # Especificando a codificação como UTF-8
+    writer = csv.writer(file)
+    writer.writerow(["Data", "Preço de fechamento do CHZUSDT", "Preço máximo do dia", "Preço mínimo do dia"])
+    for (date, price), (date_max_min, max_price, min_price) in zip(prices, min_max_prices):
+        formatted_date = date.strftime("%Y-%m-%d %H:%M:%S")
+        formatted_price = locale.format_string("%.5f", price, grouping=True).replace(',', '.')  # Substitui ',' por '.' para o formato CSV
+        formatted_max_price = locale.format_string("%.5f", max_price, grouping=True).replace(',', '.')  # Substitui ',' por '.' para o formato CSV
+        formatted_min_price = locale.format_string("%.5f", min_price, grouping=True).replace(',', '.')  # Substitui ',' por '.' para o formato CSV
+        writer.writerow([formatted_date, formatted_price, formatted_max_price, formatted_min_price])
+
+print(f'Dados salvos em {csv_filename}')
+
